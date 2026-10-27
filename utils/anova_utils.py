@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_bool_dtype, is_numeric_dtype
+from scipy.stats import f as distribucion_f
 from scipy.stats import studentized_range
 from statsmodels.formula.api import ols
 from statsmodels.stats.anova import anova_lm
@@ -162,6 +163,35 @@ def tabla_anova(modelo: RegressionResultsWrapper) -> pd.DataFrame:
         }
     )
     return pd.DataFrame(filas, columns=["Fuente", "gl", "SC", "CM", "F", "p-valor"])
+
+
+def f_critica(tabla: pd.DataFrame, alfa: float = 0.05) -> float:
+    """Calcula el valor crítico de F para tratamientos en un DCA.
+
+    Args:
+        tabla: Tabla ANOVA con las filas ``Tratamientos`` y ``Error``.
+        alfa: Nivel de significancia entre 0 y 1.
+
+    Returns:
+        Valor crítico de la distribución F.
+
+    Raises:
+        ValueError: Si alfa o los grados de libertad no son válidos.
+    """
+    if not 0 < alfa < 1:
+        raise ValueError("El nivel de significancia alfa debe estar entre 0 y 1.")
+
+    # Los grados de libertad de tratamientos y error definen la distribución F bajo H0.
+    filas = tabla.set_index("Fuente")
+    if not {"Tratamientos", "Error"}.issubset(filas.index):
+        raise ValueError("La tabla ANOVA debe incluir Tratamientos y Error.")
+    gl_tratamientos = float(filas.loc["Tratamientos", "gl"])
+    gl_error = float(filas.loc["Error", "gl"])
+    if gl_tratamientos <= 0 or gl_error <= 0:
+        raise ValueError("Los grados de libertad deben ser mayores que cero.")
+
+    # El cuantil 1-alfa delimita la región de rechazo de la prueba F.
+    return float(distribucion_f.ppf(1 - alfa, gl_tratamientos, gl_error))
 
 
 def resumen_tratamientos(
